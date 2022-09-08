@@ -26,48 +26,83 @@ const FinalDoc = new Schema({
     methods:{
         setFromStats(stat: Statistics_fields):Promise<string|Error> {
             return new Promise((res,rej)=>{
-                College.find({ country: stat.country }).lean().then(colleges => {
-                    this._id = stat.country
-                    this.count = colleges.length
-                    var allDiffs: Array<{
-                        collegeId: string
-                        difference: number
-                    }> = []
-                    var longitudes: Array<{
-                        collegeId: string
-                        longitude: number
-                    }> = []
-                    var latitudes: Array<{
-                        collegeId: string
-                        latitude: number
-                    }> = []
-                    colleges.forEach(college => {
-                        /// data have only 2018 year so we imagine that we are in 2018
-                        var currStudents: number | undefined = college.students.find(el => el.year === 2018)?.number
-                        var collegeId: string = college._id.toString()
-                        allDiffs.push({
-                            collegeId,
-                            difference: currStudents ? stat.overallStudents - currStudents : stat.overallStudents
-                        })
-                        longitudes.push({
-                            collegeId,
-                            longitude: college.location.ll[0]
-                        })
-                        latitudes.push({
-                            collegeId,
-                            latitude: college.location.ll[1]
-                        })
-                    })
-                    this.allDiffs = allDiffs
-                    this.latitude = latitudes
-                    this.longitude = longitudes
-                    this.save().then(()=>{
-                        res('success')
-                    })
-                    
-                },err=>{
+                College.aggregate([
+                    {
+                      '$match': {
+                        'country': stat.country
+                      }
+                    }, {
+                      '$addFields': {
+                        'latitude': {
+                          '$arrayElemAt': [
+                            '$location.ll', 0
+                          ]
+                        }, 
+                        'longitute': {
+                          '$arrayElemAt': [
+                            '$location.ll', 1
+                          ]
+                        }, 
+                        'StudentsThisYear': {
+                          '$arrayElemAt': [
+                            {
+                              '$filter': {
+                                'input': '$students', 
+                                'as': 'student', 
+                                'cond': {
+                                  '$eq': [
+                                    '$$student.year', 2018
+                                  ]
+                                }
+                              }
+                            }, 0
+                          ]
+                        }
+                      }
+                    }, {
+                      '$addFields': {
+                        'numofStudents': '$StudentsThisYear.number', 
+                        '_id': '$country'
+                      }
+                    }, {
+                      '$project': {
+                        'city': 0, 
+                        'name': 0, 
+                        'location': 0, 
+                        'students': 0, 
+                        'StudentsThisYear': 0, 
+                        'seconds': 0
+                      }
+                    }, {
+                      '$group': {
+                        '_id': '$country', 
+                        'AllDiffs': {
+                          '$addToSet': {
+                            '$add': [
+                              '$numofStudents', -stat.overallStudents
+                            ]
+                          }
+                        }, 
+                        'count': {
+                          '$sum': 1
+                        }, 
+                        'longitute': {
+                          '$addToSet': '$longitute'
+                        }, 
+                        'latitude': {
+                          '$addToSet': '$latitude'
+                        }
+                      }
+                    }, {
+                      '$merge': {
+                        'into': 'finaldocs'
+                      }
+                    }
+                  ]).then(result=>{
+                    res('success')
+                  },err=>{
                     rej(err)
-                })
+                  })
             })
         }
     }
