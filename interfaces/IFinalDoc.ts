@@ -1,4 +1,5 @@
 import {Document,ObjectId} from 'mongoose'
+import Statistics_fields from './IStatistics'
 
 export default interface IFinalDoc{
     _id:string
@@ -15,4 +16,5 @@ export default interface IFinalDoc{
         collegeId:string
         latitude:number
     }>
+    setFromStats(stat:Statistics_fields):Promise<string|Error>
 }
